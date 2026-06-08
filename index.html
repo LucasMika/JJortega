@@ -233,7 +233,7 @@
       <p class="section-sub">We proudly serve the following towns and neighborhoods. Not sure if we cover your area? Just ask!</p>
 
       <div class="area-map-embed">
-  <div id="service-map" style="width:100%; height:420px; border-radius:16px; overflow:hidden;"></div>
+  <div id="service-map" style="width:100%; height:420px; border-radius:16px; overflow:hidden; position:relative; z-index:0;"></div>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -245,38 +245,57 @@
         maxZoom: 18
       }).addTo(map);
 
-      var cities = [
-        { name: 'Holland',    lat: 42.7870, lng: -86.1089, r: 5000 },
-        { name: 'Zeeland',    lat: 42.8128, lng: -86.0175, r: 2500 },
-        { name: 'Saugatuck',  lat: 42.6567, lng: -86.2006, r: 2000 },
-        { name: 'Douglas',    lat: 42.6434, lng: -86.2017, r: 1500 },
-        { name: 'Fennville',  lat: 42.5901, lng: -86.1067, r: 2000 }
+      var style = {
+        color: '#2d6a4f',
+        weight: 2.5,
+        opacity: 1,
+        fillColor: '#52b788',
+        fillOpacity: 0.35
+      };
+
+      var queries = [
+        { name: 'Holland',    q: 'Holland+city+Michigan+USA' },
+        { name: 'Zeeland',    q: 'Zeeland+city+Michigan+USA' },
+        { name: 'Saugatuck', q: 'Saugatuck+Michigan+USA' },
+        { name: 'Douglas',   q: 'Douglas+city+Michigan+USA' },
+        { name: 'Fennville', q: 'Fennville+Michigan+USA' }
       ];
 
-      cities.forEach(function(city) {
-        L.circle([city.lat, city.lng], {
-          radius: city.r,
-          color: '#2d6a4f',
-          weight: 2,
-          opacity: 0.8,
-          fillColor: '#52b788',
-          fillOpacity: 0.3
-        }).addTo(map).bindTooltip(city.name, { permanent: true, direction: 'center', className: 'city-label' });
+      queries.forEach(function(city) {
+        var url = 'https://nominatim.openstreetmap.org/search?q=' + city.q +
+                  '&format=json&limit=1&polygon_geojson=1&countrycodes=us';
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!data || !data[0] || !data[0].geojson) return;
+            var geojson = data[0].geojson;
+            if (geojson.type !== 'Polygon' && geojson.type !== 'MultiPolygon') return;
+            L.geoJSON(geojson, { style: style })
+              .addTo(map)
+              .bindTooltip(city.name, { permanent: true, direction: 'center', className: 'city-label' });
+          })
+          .catch(function(e) { console.warn('Could not load boundary for ' + city.name, e); });
       });
     })();
   </script>
   <style>
     .city-label {
-      background: transparent;
-      border: none;
-      box-shadow: none;
+      background: rgba(255,255,255,0.85);
+      border: 1.5px solid #2d6a4f !important;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15) !important;
+      border-radius: 6px !important;
       font-family: "DM Sans", sans-serif;
       font-size: 12px;
       font-weight: 700;
       color: #1a1a2e;
-      text-shadow: 0 1px 3px rgba(255,255,255,0.9);
+      padding: 2px 8px !important;
     }
     .city-label::before { display: none; }
+    /* Fix map z-index so it never overlaps the navbar */
+    .leaflet-pane,
+    .leaflet-top,
+    .leaflet-bottom { z-index: 1 !important; }
+    #navbar { z-index: 1000 !important; }
   </style>
 </div>
 
