@@ -233,71 +233,87 @@
       <p class="section-sub">We proudly serve the following towns and neighborhoods. Not sure if we cover your area? Just ask!</p>
 
       <div class="area-map-embed">
-  <div id="service-map" style="width:100%; height:420px; border-radius:16px; overflow:hidden; position:relative; z-index:0;"></div>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    (function() {
-      var map = L.map('service-map', { zoomControl: true, scrollWheelZoom: false }).setView([42.72, -86.12], 10);
+        <div id="service-map" style="width:100%; height:420px; border-radius:16px; overflow:hidden; position:relative; z-index:0;"></div>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+          (function() {
+            var map = L.map('service-map', { zoomControl: true, scrollWheelZoom: false }).setView([42.72, -86.12], 10);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18
-      }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              maxZoom: 18
+            }).addTo(map);
 
-      var style = {
-        color: '#2d6a4f',
-        weight: 2.5,
-        opacity: 1,
-        fillColor: '#52b788',
-        fillOpacity: 0.35
-      };
+            var highlightStyle = {
+              color: '#2d6a4f',
+              weight: 2.5,
+              opacity: 1,
+              fillColor: '#52b788',
+              fillOpacity: 0.35
+            };
 
-      var queries = [
-        { name: 'Holland',    q: 'Holland+city+Michigan+USA' },
-        { name: 'Zeeland',    q: 'Zeeland+city+Michigan+USA' },
-        { name: 'Saugatuck', q: 'Saugatuck+Michigan+USA' },
-        { name: 'Douglas',   q: 'Douglas+city+Michigan+USA' },
-        { name: 'Fennville', q: 'Fennville+Michigan+USA' }
-      ];
+            // Verified OSM relation IDs from Wikidata for each city
+            var cities = [
+              { name: 'Holland',    id: 134433 },
+              { name: 'Zeeland',    id: 134802 },
+              { name: 'Saugatuck', id: 134429 },
+              { name: 'Douglas',   id: 134430 },
+              { name: 'Fennville', id: 134768 }
+            ];
 
-      queries.forEach(function(city) {
-        var url = 'https://nominatim.openstreetmap.org/search?q=' + city.q +
-                  '&format=json&limit=1&polygon_geojson=1&countrycodes=us';
-        fetch(url, { headers: { 'Accept': 'application/json' } })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (!data || !data[0] || !data[0].geojson) return;
-            var geojson = data[0].geojson;
-            if (geojson.type !== 'Polygon' && geojson.type !== 'MultiPolygon') return;
-            L.geoJSON(geojson, { style: style })
-              .addTo(map)
-              .bindTooltip(city.name, { permanent: true, direction: 'center', className: 'city-label' });
-          })
-          .catch(function(e) { console.warn('Could not load boundary for ' + city.name, e); });
-      });
-    })();
-  </script>
-  <style>
-    .city-label {
-      background: rgba(255,255,255,0.85);
-      border: 1.5px solid #2d6a4f !important;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.15) !important;
-      border-radius: 6px !important;
-      font-family: "DM Sans", sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      color: #1a1a2e;
-      padding: 2px 8px !important;
-    }
-    .city-label::before { display: none; }
-    /* Fix map z-index so it never overlaps the navbar */
-    .leaflet-pane,
-    .leaflet-top,
-    .leaflet-bottom { z-index: 1 !important; }
-    #navbar { z-index: 1000 !important; }
-  </style>
-</div>
+            // Fetch all 5 city boundaries in one Overpass API call
+            var ids = cities.map(function(c) { return 'rel(' + c.id + ');'; }).join('');
+            var query = '[out:json];(' + ids + ');out geom;';
+            var url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+
+            fetch(url)
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                data.elements.forEach(function(el) {
+                  var city = cities.find(function(c) { return c.id === el.id; });
+                  if (!city) return;
+                  var geojson = buildGeoJSON(el);
+                  if (!geojson) return;
+                  L.geoJSON(geojson, { style: highlightStyle })
+                    .addTo(map)
+                    .bindTooltip(city.name, { permanent: true, direction: 'center', className: 'city-label' });
+                });
+              })
+              .catch(function(e) { console.warn('Overpass error', e); });
+
+            function buildGeoJSON(el) {
+              if (!el.members) return null;
+              var rings = [];
+              el.members.forEach(function(m) {
+                if (m.type === 'way' && m.geometry) {
+                  rings.push(m.geometry.map(function(pt) { return [pt.lon, pt.lat]; }));
+                }
+              });
+              if (rings.length === 0) return null;
+              return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: {} }] };
+            }
+          })();
+        </script>
+        <style>
+          .city-label {
+            background: rgba(255,255,255,0.85);
+            border: 1.5px solid #2d6a4f !important;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.15) !important;
+            border-radius: 6px !important;
+            font-family: "DM Sans", sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: #1a1a2e;
+            padding: 2px 8px !important;
+          }
+          .city-label::before { display: none; }
+          .leaflet-pane,
+          .leaflet-top,
+          .leaflet-bottom { z-index: 1 !important; }
+          #navbar { z-index: 1000 !important; }
+        </style>
+      </div>
 
       <div class="area-chips">
         <div class="area-chip">Holland</div>
